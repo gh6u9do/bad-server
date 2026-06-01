@@ -21,20 +21,17 @@ app.use(cookieParser())
 app.use(cors({ origin: ORIGIN_ALLOW, credentials: true }));
 // app.use(express.static(path.join(__dirname, 'public')));
 
-app.use(serveStatic(path.join(__dirname, 'public')))
+app.use(serveStatic(path.join(__dirname, 'public')));
 
-app.use(urlencoded({ extended: true }))
-app.use(json())
+app.use(urlencoded({ extended: true , limit: '10kb'}));
+app.use(json({limit: '10kb'}));
 
 app.options('*', cors());
 
 const limitter = rateLimit({
-    // выставляем ограничение на 15 минут
-    windowMs: 15 * 60 * 1000,
-    // выставляем максимум 100 запросов с 1 ip 
-    max: 100,
-    // выводим текст когда достигли лимита
-    message: "слишком много запросов, попробуйте позже"
+    windowMs: 60 * 1000,
+    max: 50,
+    message: 'Слишком много запросов, попробуйте позже',
 });
 
 // подключаем лимитер
