@@ -164,27 +164,24 @@ const refreshAccessToken = async (
     }
 }
 
+//  пофикшена уязвимость
 const getCurrentUserRoles = async (
     req: Request,
     res: Response,
     next: NextFunction
 ) => {
-    const userId = res.locals.user._id
+    
     try {
-        await User.findById(userId, req.body, {
-            new: true,
-        }).orFail(
-            () =>
-                new NotFoundError(
-                    'Пользователь по заданному id отсутствует в базе'
-                )
-        )
-        res.status(200).json(res.locals.user.roles)
+        const userId = res.locals.user._id;
+        const user = await User.findById(userId).orFail(() =>  new NotFoundError('Пользователь по заданному id отсутствует в базе'));
+        
+        res.status(200).json(user.roles);
     } catch (error) {
         next(error)
     }
 }
 
+// пофикшена уязвимость
 const updateCurrentUser = async (
     req: Request,
     res: Response,
@@ -192,7 +189,11 @@ const updateCurrentUser = async (
 ) => {
     const userId = res.locals.user._id
     try {
-        const updatedUser = await User.findByIdAndUpdate(userId, req.body, {
+
+        // достаем нужные поля из запроса
+        const { name, email } = req.body;
+
+        const updatedUser = await User.findByIdAndUpdate(userId, { name, email }, {
             new: true,
         }).orFail(
             () =>

@@ -7,6 +7,7 @@ import ConflictError from '../errors/conflict-error'
 import NotFoundError from '../errors/not-found-error'
 import Product from '../models/product'
 import movingFile from '../utils/movingFile'
+import { IProduct } from '../models/product'
 
 // GET /product
 const getProducts = async (req: Request, res: Response, next: NextFunction) => {
@@ -40,7 +41,7 @@ const createProduct = async (
     next: NextFunction
 ) => {
     try {
-        const { description, category, price, title, image } = req.body
+        const { description, category, price, title, image } = req.body;
 
         // Переносим картинку из временной папки
         if (image) {
@@ -80,11 +81,11 @@ const updateProduct = async (
     next: NextFunction
 ) => {
     try {
-        const { productId } = req.params
-        const { image } = req.body
+        const { productId } = req.params;
+        const { image, description, category, price, title } = req.body;
 
         // Переносим картинку из временной папки
-        if (image) {
+        if (image?.fileName) {
             movingFile(
                 image.fileName,
                 join(__dirname, `../public/${process.env.UPLOAD_PATH_TEMP}`),
@@ -92,15 +93,17 @@ const updateProduct = async (
             )
         }
 
+        // создаем объект с обновленными данными товара
+        const updateData: Partial<IProduct>= {};
+        if (description !== undefined) updateData.description = description;
+        if (category !== undefined) updateData.category = category;
+        if (price !== undefined) updateData.price = price;
+        if (title !== undefined) updateData.title = title;
+        if (image !== undefined) updateData.image = image;
+
         const product = await Product.findByIdAndUpdate(
             productId,
-            {
-                $set: {
-                    ...req.body,
-                    price: req.body.price ? req.body.price : null,
-                    image: req.body.image ? req.body.image : undefined,
-                },
-            },
+            { $set: updateData },
             { runValidators: true, new: true }
         ).orFail(() => new NotFoundError('Нет товара по заданному id'))
         return res.send(product)

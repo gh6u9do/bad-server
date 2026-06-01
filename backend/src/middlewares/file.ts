@@ -1,7 +1,9 @@
-import { Request, Express } from 'express'
-import multer, { FileFilterCallback } from 'multer'
-import { mkdirSync } from 'fs'
-import { join } from 'path'
+import { Request, Express } from 'express';
+import multer, { FileFilterCallback } from 'multer';
+import { mkdirSync } from 'fs';
+import { join } from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import path = require('path');
 
 type DestinationCallback = (error: Error | null, destination: string) => void
 type FileNameCallback = (error: Error | null, filename: string) => void
@@ -29,7 +31,8 @@ const storage = multer.diskStorage({
         file: Express.Multer.File,
         cb: FileNameCallback
     ) => {
-        cb(null, file.originalname)
+        const ext = path.extname(file.originalname);
+        cb(null, `${uuidv4()}${ext}`);
     },
 })
 
@@ -53,4 +56,13 @@ const fileFilter = (
     return cb(null, true)
 }
 
-export default multer({ storage, fileFilter })
+export default multer({
+    storage,
+    fileFilter,
+    limits: {
+        // ставим максимум 10 мб
+        fileSize: 10 * 1024 * 1024,
+        // максимум 1 файл
+        files: 1
+    }
+})

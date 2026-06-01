@@ -1,8 +1,10 @@
 import { NextFunction, Request, Response } from 'express'
 import { FilterQuery } from 'mongoose'
 import NotFoundError from '../errors/not-found-error'
+import BadRequestError from '../errors/bad-request-error'
 import Order from '../models/order'
 import User, { IUser } from '../models/user'
+import { Role } from '../models/user'
 
 // TODO: Добавить guard admin
 // eslint-disable-next-line max-len
@@ -91,8 +93,15 @@ export const getCustomers = async (
             }
         }
 
+        // экранируем спецсимволы регулярных выражений
+        const escapeRegex = (string: string) => {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        };
+
         if (search) {
-            const searchRegex = new RegExp(search as string, 'i')
+            // используем функцию для экранирования спец символов
+            const safeSearch = escapeRegex(search as string);
+            const searchRegex = new RegExp(safeSearch, 'i')
             const orders = await Order.find(
                 {
                     $or: [{ deliveryAddress: searchRegex }],
@@ -108,16 +117,26 @@ export const getCustomers = async (
             ]
         }
 
-        const sort: { [key: string]: any } = {}
+        const sort: { [key: string]: any } = {};
+
+        // записываем только разрешенные поля для сортировки
+        const ALLOWED_SORT_FIELDS = ['createdAt', 'name', 'email', 'totalAmount', 'orderCount', 'lastOrderDate'];
+
+        // выкидываем ошибку если поле сортировки не соответствует разрешенному
+        if (sortField && !ALLOWED_SORT_FIELDS.includes(sortField as string)) {
+            return next(new BadRequestError('Недопустимое поле сортировки'));
+        }
 
         if (sortField && sortOrder) {
             sort[sortField as string] = sortOrder === 'desc' ? -1 : 1
         }
 
+        const normalLimit = Math.min(Number(limit) || 10, 10)
+
         const options = {
             sort,
-            skip: (Number(page) - 1) * Number(limit),
-            limit: Number(limit),
+            skip: (Number(page) - 1) * Number(normalLimit),
+            limit: Number(normalLimit),
         }
 
         const users = await User.find(filters, null, options).populate([
@@ -137,7 +156,7 @@ export const getCustomers = async (
         ])
 
         const totalUsers = await User.countDocuments(filters)
-        const totalPages = Math.ceil(totalUsers / Number(limit))
+        const totalPages = Math.ceil(totalUsers / Number(normalLimit))
 
         res.status(200).json({
             customers: users,
@@ -145,7 +164,7 @@ export const getCustomers = async (
                 totalUsers,
                 totalPages,
                 currentPage: Number(page),
-                pageSize: Number(limit),
+                pageSize: Number(normalLimit),
             },
         })
     } catch (error) {
@@ -179,19 +198,25 @@ export const updateCustomer = async (
     next: NextFunction
 ) => {
     try {
-        const updatedUser = await User.findByIdAndUpdate(
-            req.params.id,
-            req.body,
-            {
-                new: true,
-            }
-        )
-            .orFail(
-                () =>
-                    new NotFoundError(
-                        'Пользователь по заданному id отсутствует в базе'
-                    )
-            )
+        // разрешаем обновлять только безопасные поля
+        const { name, email, phone, roles } = req.body;
+
+        // валидируем roles
+        const validRoles = roles?.filter((role: string) =>
+            Object.values(Role).includes(role as Role)
+        );
+
+        // крафтим объект с обновленными данными
+        const updateData: Partial<IUser> = {};
+
+        // если данные корректные - записываем в объект
+        if (name !== undefined) updateData.name = name;
+        if (email !== undefined) updateData.email = email;
+        if (phone !== undefined) updateData.phone = phone;
+        if (validRoles) updateData.roles = validRoles;
+
+        const updatedUser = await User.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true })
+            .orFail(() => new NotFoundError('Пользователь по заданному id отсутствует в базе'))
             .populate(['orders', 'lastOrder'])
         res.status(200).json(updatedUser)
     } catch (error) {

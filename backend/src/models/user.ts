@@ -2,7 +2,7 @@
 import crypto from 'crypto'
 import jwt from 'jsonwebtoken'
 import mongoose, { Document, HydratedDocument, Model, Types } from 'mongoose'
-import validator from 'validator'
+import validator from 'validator' 
 import md5 from 'md5'
 
 import { ACCESS_TOKEN, REFRESH_TOKEN } from '../config'
@@ -11,7 +11,7 @@ import UnauthorizedError from '../errors/unauthorized-error'
 export enum Role {
     Customer = 'customer',
     Admin = 'admin',
-}
+} 
 
 export interface IUser extends Document {
     name: string

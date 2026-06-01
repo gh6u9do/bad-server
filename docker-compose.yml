@@ -42,7 +42,10 @@ services:
     ports:
       - 80:80
     volumes:
+      # ниже вариант из задания:
       - frontend:/var/app
+      # ниже вариант для фикса ошибки:
+      # - ./frontend/dist:/var/app
       - public:/var/public
     depends_on:
       - frontend

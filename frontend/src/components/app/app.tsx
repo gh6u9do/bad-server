@@ -45,16 +45,26 @@ import 'react-toastify/dist/ReactToastify.css'
 import { PersistGate } from 'redux-persist/integration/react'
 import AdminCustomerDetail from '../admin/admin-customer-detail'
 import ProfileOrderDetail from '../profile/profile-order-detail'
+import api from '../../utils/weblarek-api'
 
-const App = () => (
-    <BrowserRouter>
-        <ProviderComponent>
-            <div className={styles.app}>
-                <RouteComponent />
-            </div>
-        </ProviderComponent>
-    </BrowserRouter>
-)
+const App = () => {
+    useEffect(() => {
+        console.log('!!! APP MOUNTED !!!')
+        api.getCsrfToken()
+            .then((token) => console.log('CSRF initialized:', token))
+            .catch((err) => console.error('CSRF failed:', err))
+    }, [])
+
+    return (
+        <BrowserRouter>
+            <ProviderComponent>
+                <div className={styles.app}>
+                    <RouteComponent />
+                </div>
+            </ProviderComponent>
+        </BrowserRouter>
+    )
+}
 
 export default App
 

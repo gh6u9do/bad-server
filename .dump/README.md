@@ -4,7 +4,7 @@
 - login: `admin@mail.ru`
 - password: `password`
 
-#### Customer 1
+#### Customer 1 
 - login: `user1@mail.ru`
 - password: `password1`
 

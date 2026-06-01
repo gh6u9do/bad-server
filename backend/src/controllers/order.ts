@@ -5,6 +5,7 @@ import NotFoundError from '../errors/not-found-error'
 import Order, { IOrder } from '../models/order'
 import Product, { IProduct } from '../models/product'
 import User from '../models/user'
+import validator from 'validator'
 
 // eslint-disable-next-line max-len
 // GET /orders?page=2&limit=5&sort=totalAmount&order=desc&orderDateFrom=2024-07-01&orderDateTo=2024-08-01&status=delivering&totalAmountFrom=100&totalAmountTo=1000&search=%2B1
@@ -30,12 +31,13 @@ export const getOrders = async (
 
         const filters: FilterQuery<Partial<IOrder>> = {}
 
+        // убрал копирование объекта в фильтр для закрытия NoSql уязвимости
         if (status) {
-            if (typeof status === 'object') {
-                Object.assign(filters, status)
-            }
             if (typeof status === 'string') {
                 filters.status = status
+            }
+            else {
+                return next(new BadRequestError('Недопустимый статус'));
             }
         }
 
@@ -89,8 +91,16 @@ export const getOrders = async (
             { $unwind: '$products' },
         ]
 
+        // экранируем спецсимволы регулярных выражений
+        const escapeRegex = (string: string) => {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        };
+
         if (search) {
-            const searchRegex = new RegExp(search as string, 'i')
+            // используем функцию для экранирования спец символов
+            const safeSearch = escapeRegex(search as string);
+            const searchRegex = new RegExp(safeSearch, 'i');
+
             const searchNumber = Number(search)
 
             const searchConditions: any[] = [{ 'products.title': searchRegex }]
@@ -110,14 +120,25 @@ export const getOrders = async (
 
         const sort: { [key: string]: any } = {}
 
+        // записываем только разрешенные поля для сортировки
+        const ALLOWED_SORT_FIELDS = ['createdAt', 'orderNumber', 'status', 'totalAmount', 'deliveryAddress'];
+
+        // выкидываем ошибку если поле сортировки не соответствует разрешенному
+        if (sortField && !ALLOWED_SORT_FIELDS.includes(sortField as string)) {
+            return next(new BadRequestError('Недопустимое поле сортировки'));
+        }
+
         if (sortField && sortOrder) {
             sort[sortField as string] = sortOrder === 'desc' ? -1 : 1
         }
 
+        // задаем жесткий лимит
+        const normalLimit = Math.min(Number(limit) || 10, 10);
+
         aggregatePipeline.push(
             { $sort: sort },
-            { $skip: (Number(page) - 1) * Number(limit) },
-            { $limit: Number(limit) },
+            { $skip: (Number(page) - 1) * Number(normalLimit) },
+            { $limit: Number(normalLimit) },
             {
                 $group: {
                     _id: '$_id',
@@ -131,9 +152,9 @@ export const getOrders = async (
             }
         )
 
-        const orders = await Order.aggregate(aggregatePipeline)
-        const totalOrders = await Order.countDocuments(filters)
-        const totalPages = Math.ceil(totalOrders / Number(limit))
+        const orders = await Order.aggregate(aggregatePipeline);
+        const totalOrders = await Order.countDocuments(filters);
+        const totalPages = Math.ceil(totalOrders / Number(normalLimit));
 
         res.status(200).json({
             orders,
@@ -141,7 +162,7 @@ export const getOrders = async (
                 totalOrders,
                 totalPages,
                 currentPage: Number(page),
-                pageSize: Number(limit),
+                pageSize: Number(normalLimit),
             },
         })
     } catch (error) {
@@ -155,11 +176,14 @@ export const getOrdersCurrentUser = async (
     next: NextFunction
 ) => {
     try {
-        const userId = res.locals.user._id
-        const { search, page = 1, limit = 5 } = req.query
+        const userId = res.locals.user._id;
+        const { search, page = 1, limit: rawLimit = 5 } = req.query;
+
+        const normalLimit = Math.min(Number(rawLimit) || 5, 10);
+
         const options = {
-            skip: (Number(page) - 1) * Number(limit),
-            limit: Number(limit),
+            skip: (Number(page) - 1) * Number(normalLimit),
+            limit: Number(normalLimit), 
         }
 
         const user = await User.findById(userId)
@@ -183,10 +207,17 @@ export const getOrdersCurrentUser = async (
 
         let orders = user.orders as unknown as IOrder[]
 
+        // экранируем спецсимволы регулярных выражений
+        const escapeRegex = (string: string) => {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        };
+
         if (search) {
             // если не экранировать то получаем Invalid regular expression: /+1/i: Nothing to repeat
-            const searchRegex = new RegExp(search as string, 'i')
-            const searchNumber = Number(search)
+            // используем функцию для экранирования спец символов
+            const safeSearch = escapeRegex(search as string);
+            const searchRegex = new RegExp(safeSearch, 'i');
+            const searchNumber = Number(safeSearch);
             const products = await Product.find({ title: searchRegex })
             const productIds = products.map((product) => product._id)
 
@@ -205,7 +236,7 @@ export const getOrdersCurrentUser = async (
         }
 
         const totalOrders = orders.length
-        const totalPages = Math.ceil(totalOrders / Number(limit))
+        const totalPages = Math.ceil(totalOrders / Number(normalLimit))
 
         orders = orders.slice(options.skip, options.skip + options.limit)
 
@@ -215,7 +246,7 @@ export const getOrdersCurrentUser = async (
                 totalOrders,
                 totalPages,
                 currentPage: Number(page),
-                pageSize: Number(limit),
+                pageSize: Number(normalLimit),
             },
         })
     } catch (error) {
@@ -288,11 +319,13 @@ export const createOrder = async (
     next: NextFunction
 ) => {
     try {
-        const basket: IProduct[] = []
-        const products = await Product.find<IProduct>({})
-        const userId = res.locals.user._id
-        const { address, payment, phone, total, email, items, comment } =
-            req.body
+        const basket: IProduct[] = [];
+        const products = await Product.find<IProduct>({});
+        const userId = res.locals.user._id;
+        const { address, payment, phone, total, email, items, comment } = req.body;
+
+        // санитизируем комментарий
+        const sanitizedComment = validator.escape(comment || '');
 
         items.forEach((id: Types.ObjectId) => {
             const product = products.find((p) => p._id.equals(id))
@@ -315,7 +348,7 @@ export const createOrder = async (
             payment,
             phone,
             email,
-            comment,
+            comment: sanitizedComment,
             customer: userId,
             deliveryAddress: address,
         })
