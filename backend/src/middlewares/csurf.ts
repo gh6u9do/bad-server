@@ -1,5 +1,5 @@
 import csurf from "csurf";
-
+import { RequestHandler } from "express";
 
 export const csurfProtection = csurf({
     cookie: {
@@ -8,4 +8,4 @@ export const csurfProtection = csurf({
         secure: false,
         maxAge: 3600000,
     }
-})
+}) as unknown as RequestHandler;
