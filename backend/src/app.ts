@@ -30,7 +30,7 @@ app.options('*', cors());
 
 const limitter = rateLimit({
     windowMs: 60 * 1000,
-    max: 50,
+    max: 1000,
     message: 'Слишком много запросов, попробуйте позже',
 });
 
