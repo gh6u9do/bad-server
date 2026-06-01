@@ -31,12 +31,30 @@ export type ApiListResponse<Type> = {
 }
 
 class Api {
-    private readonly baseUrl: string
-    protected options: RequestInit
+    private readonly baseUrl: string;
+    protected options: RequestInit;
+
+    private csrfToken: string = '';
+
+    // записать CSRF токен
+    setCsrfToken = (token: string) => {
+        this.csrfToken = token;
+    }
+
+    // получить CSRF токен
+    getCsrfToken = async () => {
+        const res = await this.request<{ csrfToken: string }>('/auth/csrf-token', {
+            method: 'GET',
+            credentials: 'include',
+        });
+        this.csrfToken = res.csrfToken;
+        return res.csrfToken;
+    }
 
     constructor(baseUrl: string, options: RequestInit = {}) {
         this.baseUrl = baseUrl
         this.options = {
+            credentials: 'include',
             headers: {
                 ...((options.headers as object) ?? {}),
             },
@@ -47,17 +65,33 @@ class Api {
         return response.ok
             ? response.json()
             : response
-                  .json()
-                  .then((err) =>
-                      Promise.reject({ ...err, statusCode: response.status })
-                  )
+                .json()
+                .then((err) =>
+                    Promise.reject({ ...err, statusCode: response.status })
+                )
     }
 
     protected async request<T>(endpoint: string, options: RequestInit) {
         try {
+            // достаем метод и определяем относится ли он к тем, которые требуют токен
+            const method = options.method?.toUpperCase() || 'GET';
+            const needsCsrf = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method);
+
+            // формируем headers с CSRF-токеном
+            const headers: Record<string, string> = {
+                ...((this.options.headers as Record<string, string>) || {}),
+                ...((options.headers as Record<string, string>) || {}),
+            };
+
+            // если токен нужен то записываем его из поля класса
+            if (needsCsrf && this.csrfToken) {
+                headers['X-CSRF-Token'] = this.csrfToken;
+            }
+
             const res = await fetch(`${this.baseUrl}${endpoint}`, {
                 ...this.options,
                 ...options,
+                headers
             })
             return await this.handleResponse<T>(res)
         } catch (error) {
@@ -226,7 +260,10 @@ export class WebLarekAPI extends Api implements IWebLarekAPI {
         )
     }
 
-    loginUser = (data: UserLoginBodyDto) => {
+    loginUser = async (data: UserLoginBodyDto) => {
+        // получаем токен перед логином
+        await this.getCsrfToken();
+
         return this.request<UserResponseToken>('/auth/login', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -237,7 +274,10 @@ export class WebLarekAPI extends Api implements IWebLarekAPI {
         })
     }
 
-    registerUser = (data: UserRegisterBodyDto) => {
+    registerUser = async (data: UserRegisterBodyDto) => {
+        // получаем токен перед логином
+        await this.getCsrfToken();
+
         return this.request<UserResponseToken>('/auth/register', {
             method: 'POST',
             body: JSON.stringify(data),

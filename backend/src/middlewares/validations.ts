@@ -58,7 +58,7 @@ export const validateProductBody = celebrate({
             'string.empty': 'Поле "title" должно быть заполнено',
         }),
         image: Joi.object().keys({
-            fileName: Joi.string().required(),
+            fileName: Joi.string().required().pattern(/^[a-zA-Z0-9_.\-\/]+$/),
             originalName: Joi.string().required(),
         }),
         category: Joi.string().required().messages({
@@ -78,7 +78,8 @@ export const validateProductUpdateBody = celebrate({
             'string.max': 'Максимальная длина поля "name" - 30',
         }),
         image: Joi.object().keys({
-            fileName: Joi.string().required(),
+            // валидируем имя файла таким образом чтобы там не было ничего лишнего кроме самого имени
+            fileName: Joi.string().required().pattern(/^[a-zA-Z0-9_.\-\/]+$/),
             originalName: Joi.string().required(),
         }),
         category: Joi.string(),

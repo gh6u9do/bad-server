@@ -30,12 +30,13 @@ export const getOrders = async (
 
         const filters: FilterQuery<Partial<IOrder>> = {}
 
+        // убрал копирование объекта в фильтр для закрытия NoSql уязвимости
         if (status) {
-            if (typeof status === 'object') {
-                Object.assign(filters, status)
-            }
             if (typeof status === 'string') {
                 filters.status = status
+            }
+            else {
+                return next(new BadRequestError('Недопустимый статус'));
             }
         }
 
@@ -89,8 +90,16 @@ export const getOrders = async (
             { $unwind: '$products' },
         ]
 
+        // экранируем спецсимволы регулярных выражений
+        const escapeRegex = (string: string) => {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        };
+
         if (search) {
-            const searchRegex = new RegExp(search as string, 'i')
+            // используем функцию для экранирования спец символов
+            const safeSearch = escapeRegex(search as string);
+            const searchRegex = new RegExp(safeSearch, 'i');
+
             const searchNumber = Number(search)
 
             const searchConditions: any[] = [{ 'products.title': searchRegex }]
@@ -109,6 +118,14 @@ export const getOrders = async (
         }
 
         const sort: { [key: string]: any } = {}
+
+        // записываем только разрешенные поля для сортировки
+        const ALLOWED_SORT_FIELDS = ['createdAt', 'orderNumber', 'status', 'totalAmount', 'deliveryAddress'];
+
+        // выкидываем ошибку если поле сортировки не соответствует разрешенному
+        if (sortField && !ALLOWED_SORT_FIELDS.includes(sortField as string)) {
+            return next(new BadRequestError('Недопустимое поле сортировки'));
+        }
 
         if (sortField && sortOrder) {
             sort[sortField as string] = sortOrder === 'desc' ? -1 : 1
@@ -183,10 +200,17 @@ export const getOrdersCurrentUser = async (
 
         let orders = user.orders as unknown as IOrder[]
 
+        // экранируем спецсимволы регулярных выражений
+        const escapeRegex = (string: string) => {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        };
+
         if (search) {
             // если не экранировать то получаем Invalid regular expression: /+1/i: Nothing to repeat
-            const searchRegex = new RegExp(search as string, 'i')
-            const searchNumber = Number(search)
+            // используем функцию для экранирования спец символов
+            const safeSearch = escapeRegex(search as string);
+            const searchRegex = new RegExp(safeSearch, 'i');
+            const searchNumber = Number(safeSearch);
             const products = await Product.find({ title: searchRegex })
             const productIds = products.map((product) => product._id)
 

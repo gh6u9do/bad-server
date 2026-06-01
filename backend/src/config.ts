@@ -22,3 +22,6 @@ export const REFRESH_TOKEN = {
         } as CookieOptions,
     },
 }
+
+// дописал прочтение ORIGIN_ALLOW из .env 
+export const ORIGIN_ALLOW = process.env.ORIGIN_ALLOW || 'http://localhost:5173';

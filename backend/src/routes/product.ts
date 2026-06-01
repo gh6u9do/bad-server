@@ -10,8 +10,9 @@ import {
     validateObjId,
     validateProductBody,
     validateProductUpdateBody,
-} from '../middlewares/validations'
-import { Role } from '../models/user'
+} from '../middlewares/validations';
+import { Role } from '../models/user';
+import { csurfProtection } from '../middlewares/csurf';
 
 const productRouter = Router()
 
@@ -20,6 +21,7 @@ productRouter.post(
     '/',
     auth,
     roleGuardMiddleware(Role.Admin),
+    csurfProtection,
     validateProductBody,
     createProduct
 )
@@ -27,6 +29,7 @@ productRouter.delete(
     '/:productId',
     auth,
     roleGuardMiddleware(Role.Admin),
+    csurfProtection,
     validateObjId,
     deleteProduct
 )
@@ -34,6 +37,7 @@ productRouter.patch(
     '/:productId',
     auth,
     roleGuardMiddleware(Role.Admin),
+    csurfProtection,
     validateObjId,
     validateProductUpdateBody,
     updateProduct
